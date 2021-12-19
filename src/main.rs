@@ -3,8 +3,21 @@ use clap::{App, Arg, ArgMatches};
 use std::net::{IpAddr, Ipv4Addr, Shutdown, SocketAddr, TcpStream};
 use std::str::FromStr;
 use std::time::{Duration, Instant};
-use threadpool::ThreadPool;
-use std::sync::{Arc, Barrier, mpsc::channel};
+use futures::executor::block_on;
+
+struct Port {
+    port_id: u16,
+    port_status: bool,
+}
+
+impl Port {
+    fn new(port_id: u16, port_status: bool) -> Port {
+        return Port {
+            port_id,
+            port_status,
+        };
+    }
+}
 
 fn get_matches<'s>() -> ArgMatches<'s> {
     return App::new("Scanner Air")
@@ -28,7 +41,6 @@ fn get_matches<'s>() -> ArgMatches<'s> {
                 .takes_value(true)
                 .empty_values(true)
                 .default_value("80"),
-            // .max_values(1000000),
         )
         .get_matches();
 }
@@ -49,37 +61,34 @@ fn main() {
     let time = Instant::now() - bench_start;
     println!("get address:{}", time.as_secs());
 
-    let n_workers = 100;
-    let n_jobs = 65535;
-    let pool = ThreadPool::new(n_workers);
-    let barrier = Arc::new(Barrier::new(1));
-
-    let (sender, receiver) = channel();
-
-    for port in 0..n_jobs {
-        let barrier = barrier.clone();
-        let sender = sender.clone();
-        let port:u16 = (port + 1) as u16;
-        pool.execute(move || {
-            let socket = SocketAddr::new(IpAddr::V4(address), port);
-            // println!("{}", port);
-            if let Ok(socket) = TcpStream::connect_timeout(&socket, Duration::new(1, 0)) {
-                socket.shutdown(Shutdown::Both).unwrap();
-                sender.send(port).unwrap();
-            }
-            barrier.wait();
-        })
+    let port_len = 65535;
+    let mut ports: Vec<u16> = Vec::new();
+    for i in 0..port_len {
+        ports.push((i + 1) as u16);
     }
 
-    barrier.wait();
-
-    let mut ports:Vec<u16> = Vec::new();
-
-    for port in receiver {
-        println!("{}:{} is open", address, port);
-        ports.push(port);
-    }
+    block_on(run_scanner(address, ports));
 
     let time = Instant::now() - bench_start - time;
-    println!("scanner done:{}", time.as_millis());
+    println!("Scanning is done: {} millis", time.as_millis());
+}
+
+async fn run_scanner(address: Ipv4Addr, ports: Vec<u16>) {
+    let mut port_iter = ports.iter();
+    loop {
+        match port_iter.next() {
+            Some(port) => {
+                scanner(address.clone(), port.clone()).await;
+            }
+            None => break,
+        }
+    }
+}
+
+async fn scanner(address: Ipv4Addr, port: u16) {
+    let socket = SocketAddr::new(IpAddr::V4(address), port);
+    if let Ok(socket) = TcpStream::connect_timeout(&socket, Duration::new(1, 0)) {
+        socket.shutdown(Shutdown::Both).unwrap();
+        println!("{}:{} is open", address, port);
+    }
 }
