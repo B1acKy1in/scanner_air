@@ -5,20 +5,6 @@ use std::str::FromStr;
 use std::time::{Duration, Instant};
 use futures::executor::block_on;
 
-struct Port {
-    port_id: u16,
-    port_status: bool,
-}
-
-impl Port {
-    fn new(port_id: u16, port_status: bool) -> Port {
-        return Port {
-            port_id,
-            port_status,
-        };
-    }
-}
-
 fn get_matches<'s>() -> ArgMatches<'s> {
     return App::new("Scanner Air")
         .version("0.1.0")
@@ -31,16 +17,6 @@ fn get_matches<'s>() -> ArgMatches<'s> {
                 .help("The ip address of target")
                 .takes_value(true)
                 .empty_values(true),
-        )
-        .arg(
-            Arg::with_name("port")
-                .short("p")
-                .long("port")
-                .value_name("target port")
-                .help("The port of target")
-                .takes_value(true)
-                .empty_values(true)
-                .default_value("80"),
         )
         .get_matches();
 }
